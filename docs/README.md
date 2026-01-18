@@ -9,10 +9,12 @@ Backend сервис для анализа кода на безопасност�
 - [Конфигурация](#конфигурация)
 - [API Документация](#api-документация)
 - [SOLID Принципы](#solid-принципы)
+- [GORM ORM](#gorm-orm)
 
 ## Архитектура
 
-Проект построен с использованием Clean Architecture и SOLID принципов:
+Проект построен с использованием Clean Architecture и SOLID принципов.
+Работа с БД реализована через GORM ORM с TypeORM-подобным API.
 
 ```
 secure-review/
@@ -22,27 +24,32 @@ secure-review/
 ├── internal/
 │   ├── config/
 │   │   └── config.go            # Конфигурация приложения
+│   ├── database/
+│   │   └── database.go          # GORM подключение (аналог TypeORM DataSource)
 │   ├── domain/
 │   │   ├── errors.go            # Доменные ошибки
 │   │   ├── repository.go        # Интерфейсы репозиториев
-│   │   ├── review.go            # Модели для code review
+│   │   ├── review.go            # Domain модели для code review
 │   │   ├── service.go           # Интерфейсы сервисов
-│   │   └── user.go              # Модели пользователя
+│   │   └── user.go              # Domain модели пользователя
+│   ├── entity/
+│   │   ├── user.go              # GORM Entity User (аналог @Entity)
+│   │   └── review.go            # GORM Entity CodeReview, SecurityIssue
 │   ├── handler/
 │   │   ├── auth_handler.go      # Обработчики авторизации
 │   │   ├── github_handler.go    # Обработчики GitHub OAuth
 │   │   ├── health_handler.go    # Обработчики health check
 │   │   ├── review_handler.go    # Обработчики code review
-│   │   ├── types.go             # DTO типы
 │   │   └── user_handler.go      # Обработчики пользователя
 │   ├── middleware/
 │   │   ├── auth.go              # JWT аутентификация
 │   │   ├── cors.go              # CORS middleware
 │   │   └── logging.go           # Логирование
 │   ├── repository/
-│   │   ├── postgres.go          # Подключение к PostgreSQL
-│   │   ├── review_repository.go # Репозиторий code review
-│   │   └── user_repository.go   # Репозиторий пользователей
+│   │   ├── user_repository.go   # GORM репозиторий пользователей
+│   │   ├── review_repository.go # GORM репозиторий code review
+│   │   ├── user_adapter.go      # Адаптер для domain.UserRepository
+│   │   └── review_adapter.go    # Адаптер для domain.ReviewRepository
 │   ├── router/
 │   │   └── router.go            # Настройка маршрутов
 │   └── service/
@@ -176,8 +183,8 @@ go run cmd/api/main.go
 
 Все реализации полностью соответствуют интерфейсам:
 
-- `PostgresUserRepository` implements `UserRepository`
-- `PostgresReviewRepository` implements `ReviewRepository`
+- `UserRepositoryAdapter` implements `domain.UserRepository`
+- `ReviewRepositoryAdapter` implements `domain.ReviewRepository`
 - `OpenAICodeAnalyzer` implements `CodeAnalyzer`
 
 ### Interface Segregation Principle (ISP)
@@ -196,3 +203,71 @@ go run cmd/api/main.go
 - Сервисы зависят от интерфейсов репозиториев
 - Handlers зависят от интерфейсов сервисов
 - Легкое тестирование через моки
+
+## GORM ORM
+
+Работа с базой данных реализована через GORM — Go ORM с TypeORM-подобным API.
+
+### Entity Layer
+
+Entity определяются с GORM тегами (аналог декораторов TypeORM):
+
+```go
+// internal/entity/user.go
+type User struct {
+    // @PrimaryGeneratedColumn("uuid")
+    ID uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+    
+    // @Column({ unique: true })
+    Email string `gorm:"size:255;uniqueIndex;not null"`
+    
+    // @Column()
+    Username string `gorm:"size:100;not null"`
+    
+    // @DeleteDateColumn() — Soft Delete
+    DeletedAt gorm.DeletedAt `gorm:"index"`
+    
+    // @OneToMany(() => CodeReview, review => review.user)
+    Reviews []CodeReview `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE"`
+}
+```
+
+### Database Connection
+
+```go
+// internal/database/database.go
+// Аналог new DataSource({...}).initialize()
+db, err := database.NewDatabase(databaseURL)
+
+// Аналог synchronize: true
+db.AutoMigrate()
+
+// Аналог manager.transaction()
+db.Transaction(func(tx *gorm.DB) error {
+    // ...
+})
+```
+
+### Repository Pattern
+
+```go
+// GORM методы (аналоги TypeORM)
+repo.FindByID(ctx, id)           // findOne({ where: { id } })
+repo.FindByIDWithReviews(ctx, id) // { relations: ['reviews'] }
+repo.Create(ctx, &user)          // save(user)
+repo.Delete(ctx, id)             // softDelete(id)
+repo.UpdateFields(ctx, id, map)  // update(id, { ...fields })
+```
+
+### Преимущества GORM
+
+| TypeORM | GORM |
+|---------|------|
+| `@Entity()` | `gorm:"..."` теги |
+| `@Column()` | `gorm:"size:255;not null"` |
+| `@PrimaryGeneratedColumn("uuid")` | `gorm:"type:uuid;primaryKey"` |
+| `@CreateDateColumn()` | `gorm:"autoCreateTime"` |
+| `@DeleteDateColumn()` | `gorm.DeletedAt` |
+| `@ManyToOne()` | `gorm:"foreignKey:..."` |
+| `{ relations: [...] }` | `.Preload("...")` |
+| `synchronize: true` | `AutoMigrate()` |

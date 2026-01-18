@@ -1,6 +1,72 @@
 # Схема базы данных
 
-## Таблицы
+## ORM
+
+Проект использует **GORM** — Go ORM с TypeORM-подобным API. Миграции выполняются автоматически через `AutoMigrate()`.
+
+## Entity
+
+### User Entity
+
+```go
+// internal/entity/user.go
+type User struct {
+    ID           uuid.UUID      `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+    Email        string         `gorm:"size:255;uniqueIndex;not null"`
+    Username     string         `gorm:"size:100;not null"`
+    PasswordHash string         `gorm:"size:255"`
+    GitHubID     *int64         `gorm:"index"`
+    GitHubLogin  *string        `gorm:"size:100"`
+    AvatarURL    *string        `gorm:"size:500"`
+    IsActive     bool           `gorm:"default:true"`
+    CreatedAt    time.Time      `gorm:"autoCreateTime"`
+    UpdatedAt    time.Time      `gorm:"autoUpdateTime"`
+    DeletedAt    gorm.DeletedAt `gorm:"index"` // Soft Delete
+    Reviews      []CodeReview   `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE"`
+}
+```
+
+### CodeReview Entity
+
+```go
+// internal/entity/review.go
+type CodeReview struct {
+    ID             uuid.UUID       `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+    UserID         uuid.UUID       `gorm:"type:uuid;index;not null"`
+    User           *User           `gorm:"foreignKey:UserID"`
+    Title          string          `gorm:"size:255;not null"`
+    Code           string          `gorm:"type:text;not null"`
+    Language       string          `gorm:"size:50;not null"`
+    Status         ReviewStatus    `gorm:"size:20;default:'pending'"`
+    Result         *string         `gorm:"type:text"`
+    CreatedAt      time.Time       `gorm:"autoCreateTime"`
+    UpdatedAt      time.Time       `gorm:"autoUpdateTime"`
+    CompletedAt    *time.Time
+    DeletedAt      gorm.DeletedAt  `gorm:"index"`
+    SecurityIssues []SecurityIssue `gorm:"foreignKey:ReviewID;constraint:OnDelete:CASCADE"`
+}
+```
+
+### SecurityIssue Entity
+
+```go
+type SecurityIssue struct {
+    ID          uuid.UUID        `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+    ReviewID    uuid.UUID        `gorm:"type:uuid;index;not null"`
+    Review      *CodeReview      `gorm:"foreignKey:ReviewID"`
+    Severity    SecuritySeverity `gorm:"size:20;not null"`
+    Title       string           `gorm:"size:255;not null"`
+    Description string           `gorm:"type:text;not null"`
+    LineStart   *int
+    LineEnd     *int
+    Suggestion  string           `gorm:"type:text"`
+    CWE         *string          `gorm:"size:20"`
+    CreatedAt   time.Time        `gorm:"autoCreateTime"`
+    DeletedAt   gorm.DeletedAt   `gorm:"index"`
+}
+```
+
+## Таблицы (SQL)
 
 ### users
 
@@ -168,10 +234,47 @@ CREATE INDEX idx_security_issues_severity ON security_issues(severity);
 
 ## Миграции
 
-Миграции выполняются автоматически при запуске приложения через функцию `repository.RunMigrations()`.
+Миграции выполняются **автоматически** при запуске приложения через GORM `AutoMigrate()`:
 
-При необходимости можно выполнить миграции вручную:
+```go
+// internal/database/database.go
+func (d *Database) AutoMigrate() error {
+    return d.DB.AutoMigrate(
+        &entity.User{},
+        &entity.CodeReview{},
+        &entity.SecurityIssue{},
+    )
+}
+```
 
-```bash
-psql $DATABASE_URL -f migrations/001_initial.sql
+Это аналог `synchronize: true` в TypeORM — GORM автоматически создаёт таблицы и обновляет схему на основе Entity.
+
+### Soft Delete
+
+Все Entity поддерживают soft delete через `gorm.DeletedAt`:
+
+```go
+// Soft delete — запись не удаляется, а помечается deleted_at
+repo.Delete(ctx, id)
+
+// Hard delete — полное удаление
+repo.HardDelete(ctx, id)
+
+// GORM автоматически фильтрует удалённые записи
+repo.FindAll(ctx)  // WHERE deleted_at IS NULL
+```
+
+### Подключение к БД
+
+```go
+// cmd/api/main.go
+db, err := database.NewDatabase(cfg.Database.URL)
+if err != nil {
+    log.Fatalf("Failed to connect: %v", err)
+}
+
+// Auto migrate
+if err := db.AutoMigrate(); err != nil {
+    log.Fatalf("Failed to migrate: %v", err)
+}
 ```
