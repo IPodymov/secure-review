@@ -14,12 +14,14 @@ import (
 // GitHubHandler handles GitHub OAuth endpoints
 type GitHubHandler struct {
 	githubAuthService domain.GitHubAuthService
+	frontendURL       string
 }
 
 // NewGitHubHandler creates a new GitHubHandler
-func NewGitHubHandler(githubAuthService domain.GitHubAuthService) *GitHubHandler {
+func NewGitHubHandler(githubAuthService domain.GitHubAuthService, frontendURL string) *GitHubHandler {
 	return &GitHubHandler{
 		githubAuthService: githubAuthService,
+		frontendURL:       frontendURL,
 	}
 }
 
@@ -39,21 +41,18 @@ func (h *GitHubHandler) GetAuthURL(c *gin.Context) {
 func (h *GitHubHandler) Callback(c *gin.Context) {
 	code := c.Query("code")
 	if code == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Authorization code is required",
-		})
+		c.Redirect(http.StatusFound, h.frontendURL+"/login?error=no_code")
 		return
 	}
 
 	response, err := h.githubAuthService.AuthenticateOrCreate(c.Request.Context(), code)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to authenticate with GitHub: " + err.Error(),
-		})
+		c.Redirect(http.StatusFound, h.frontendURL+"/login?error=auth_failed")
 		return
 	}
 
-	c.JSON(http.StatusOK, response)
+	// Redirect to frontend with token
+	c.Redirect(http.StatusFound, h.frontendURL+"/login?token="+response.Token)
 }
 
 // LinkAccount links GitHub account to existing user
