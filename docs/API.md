@@ -167,28 +167,12 @@ Authorization: Bearer <token>
 
 #### GET /auth/github/callback
 
-Callback endpoint для GitHub OAuth. Перенаправляет на фронтенд с токеном.
+Callback endpoint для GitHub OAuth. Обменивает код на токен и возвращает данные пользователя.
 
 **Query Parameters:**
 
 - `code` - Код авторизации от GitHub
 - `state` - State для защиты от CSRF
-
-**Response:** Редирект на `{FRONTEND_URL}/auth/callback?token=<jwt_token>`
-
----
-
-#### POST /auth/github/callback/json
-
-Callback endpoint для GitHub OAuth с JSON ответом.
-
-**Request Body:**
-
-```json
-{
-  "code": "github_auth_code"
-}
-```
 
 **Response (200 OK):**
 
@@ -206,6 +190,11 @@ Callback endpoint для GitHub OAuth с JSON ответом.
   }
 }
 ```
+
+**Errors:**
+
+- `400 Bad Request` - Отсутствует код
+- `500 Internal Server Error` - Ошибка аутентификации
 
 ---
 
