@@ -167,34 +167,19 @@ Authorization: Bearer <token>
 
 #### GET /auth/github/callback
 
-Callback endpoint для GitHub OAuth. Обменивает код на токен и возвращает данные пользователя.
+Callback endpoint для GitHub OAuth. Принимает код от GitHub, авторизует пользователя и перенаправляет на Frontend.
 
 **Query Parameters:**
 
 - `code` - Код авторизации от GitHub
 - `state` - State для защиты от CSRF
 
-**Response (200 OK):**
+**Response (302 Found):**
 
-```json
-{
-  "token": "eyJhbGciOiJIUzI1NiIs...",
-  "user": {
-    "id": "550e8400-e29b-41d4-a716-446655440000",
-    "email": "user@github.com",
-    "username": "johndoe",
-    "github_login": "johndoe",
-    "avatar_url": "https://avatars.githubusercontent.com/u/123",
-    "is_active": true,
-    "created_at": "2024-01-15T10:30:00Z"
-  }
-}
-```
+Редирект на URL фронтенда:
 
-**Errors:**
-
-- `400 Bad Request` - Отсутствует код
-- `500 Internal Server Error` - Ошибка аутентификации
+- Успех: `{FRONTEND_URL}/login?token=<jwt_token>`
+- Ошибка: `{FRONTEND_URL}/login?error=<reason>` (например: `auth_failed`, `no_code`)
 
 ---
 

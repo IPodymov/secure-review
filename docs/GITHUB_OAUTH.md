@@ -31,6 +31,7 @@
 GITHUB_CLIENT_ID=your_client_id_here
 GITHUB_CLIENT_SECRET=your_client_secret_here
 GITHUB_REDIRECT_URL=http://localhost:8080/api/v1/auth/github/callback
+FRONTEND_URL=http://localhost:3000
 ```
 
 ## Шаг 3: Настройка для продакшена
@@ -61,11 +62,19 @@ FRONTEND_URL=https://yourdomain.com
 
 2. Пользователь перенаправляется на GitHub для авторизации
 
-3. После авторизации GitHub перенаправляет на callback URL
+3. После авторизации GitHub перенаправляет обратно на backend:
 
-4. Backend обменивает код на токен и создаёт/аутентифицирует пользователя
+   ```
+   http://localhost:8080/api/v1/auth/github/callback
+   ```
 
-5. Пользователь перенаправляется на фронтенд с JWT токеном
+4. Backend обменивает код на токен, авторизует пользователя и **делает редирект на фронтенд**:
+
+   ```
+   {FRONTEND_URL}/login?token=<jwt_token>
+   ```
+
+5. Фронтенд сохраняет полученный токен и завершает вход
 
 ### Пример фронтенд интеграции
 
@@ -80,15 +89,22 @@ window.location.href = url;
 
 ### Обработка callback на фронтенде
 
+Поскольку backend выполняет редирект с токеном в параметрах URL, на фронтенде нужно обработать этот токен:
+
 ```javascript
-// На странице /auth/callback
+// На странице /login, куда происходит редирект
 const params = new URLSearchParams(window.location.search);
 const token = params.get('token');
+const error = params.get('error');
 
 if (token) {
+  // Успешная авторизация
   localStorage.setItem('token', token);
-  // Перенаправить в приложение
-  window.location.href = '/dashboard';
+  // Очистить параметры URL или перенаправить в приложение
+  window.location.href = '/reviews';
+} else if (error) {
+  // Обработка ошибки
+  console.error('Auth failed:', error);
 }
 ```
 
