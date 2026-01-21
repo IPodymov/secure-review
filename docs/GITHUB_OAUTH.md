@@ -60,6 +60,8 @@ FRONTEND_URL=https://yourdomain.com
 
    _Запрашиваемые права (scopes):_ `user:email`, `read:user`, `repo` (для чтения списка репозиториев)
 
+   **Для привязки аккаунта:** Если пользователь уже авторизован, отправьте заголовок `Authorization: Bearer <token>`. Бэкенд установит временную cookie для связывания аккаунтов.
+
 2. Пользователь перенаправляется на GitHub для авторизации
 
 3. После авторизации GitHub перенаправляет обратно на backend:
@@ -68,19 +70,26 @@ FRONTEND_URL=https://yourdomain.com
    http://localhost:8080/api/v1/auth/github/callback
    ```
 
-4. Backend обменивает код на токен, авторизует пользователя и **делает редирект на фронтенд**:
+4. Backend:
+   - Если это вход/регистрация: создает или находит пользователя.
+   - Если это привязка (была cookie связывания): привязывает GitHub к текущему пользователю.
+   - Устанавливает HttpOnly cookie `access_token`.
+   - Делает редирект на фронтенд:
 
    ```
    {FRONTEND_URL}/login?token=<jwt_token>
    ```
 
-5. Фронтенд сохраняет полученный токен и завершает вход
+5. Фронтенд может использовать токен из URL (для совместимости) или из cookie.
 
 ### Пример фронтенд интеграции
 
 ```javascript
 // Получить URL для OAuth
-const response = await fetch('/api/v1/auth/github');
+// Если пользователь залогинен и хочет привязать GitHub:
+const headers = isLoggedIn ? { Authorization: `Bearer ${token}` } : {};
+
+const response = await fetch('/api/v1/auth/github', { headers });
 const { url } = await response.json();
 
 // Перенаправить пользователя
@@ -89,7 +98,7 @@ window.location.href = url;
 
 ### Обработка callback на фронтенде
 
-Поскольку backend выполняет редирект с токеном в параметрах URL, на фронтенде нужно обработать этот токен:
+Backend выполняет редирект с токеном в параметрах URL и устанавливает cookie `access_token`.
 
 ```javascript
 // На странице /login, куда происходит редирект
@@ -98,15 +107,20 @@ const token = params.get('token');
 const error = params.get('error');
 
 if (token) {
-  // Успешная авторизация
-  localStorage.setItem('token', token);
-  // Очистить параметры URL или перенаправить в приложение
-  window.location.href = '/reviews';
-} else if (error) {
-  // Обработка ошибки
-  console.error('Auth failed:', error);
+  // Сохранить токен (если не используются cookies) и перенаправить в дашборд
 }
 ```
+
+// Успешная авторизация
+localStorage.setItem('token', token);
+// Очистить параметры URL или перенаправить в приложение
+window.location.href = '/reviews';
+} else if (error) {
+// Обработка ошибки
+console.error('Auth failed:', error);
+}
+
+````
 
 ## Привязка GitHub к существующему аккаунту
 
@@ -122,7 +136,7 @@ sessionStorage.setItem('oauth_state', state);
 
 // Перенаправить
 window.location.href = url;
-```
+````
 
 После возврата, отправить POST запрос:
 

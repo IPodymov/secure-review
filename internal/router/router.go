@@ -100,6 +100,7 @@ func (r *Router) Setup() *gin.Engine {
 			users.GET("/me", r.userHandler.GetProfile)
 			users.PUT("/me", r.userHandler.UpdateProfile)
 			users.DELETE("/me", r.userHandler.DeleteAccount)
+			users.GET("/repos", r.githubHandler.ListRepositories)
 		}
 
 		// GitHub Data routes (auth required)

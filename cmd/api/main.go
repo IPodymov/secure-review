@@ -74,7 +74,7 @@ func main() {
 
 	// Initialize handlers
 	authHandler := handler.NewAuthHandler(authService)
-	githubHandler := handler.NewGitHubHandler(githubAuthService, cfg.Frontend.URL)
+	githubHandler := handler.NewGitHubHandler(githubAuthService, tokenGenerator, cfg.Frontend.URL)
 	userHandler := handler.NewUserHandler(userService)
 	reviewHandler := handler.NewReviewHandler(reviewService)
 	healthHandler := handler.NewHealthHandler(version)

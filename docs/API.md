@@ -154,6 +154,10 @@ Authorization: Bearer <token>
 
 Получить URL для OAuth авторизации через GitHub.
 
+**Headers (Optional):**
+
+- `Authorization: Bearer <token>` - Если передан, инициирует процесс привязки GitHub аккаунта к текущему пользователю.
+
 **Response (200 OK):**
 
 ```json
@@ -167,7 +171,8 @@ Authorization: Bearer <token>
 
 #### GET /auth/github/callback
 
-Callback endpoint для GitHub OAuth. Принимает код от GitHub, авторизует пользователя и перенаправляет на Frontend.
+Callback endpoint для GitHub OAuth. Принимает код от GitHub and перенаправляет на Frontend.
+Устанавливает cookie `access_token`.
 
 **Query Parameters:**
 
@@ -178,8 +183,8 @@ Callback endpoint для GitHub OAuth. Принимает код от GitHub, а
 
 Редирект на URL фронтенда:
 
-- Успех: `{FRONTEND_URL}/login?token=<jwt_token>`
-- Ошибка: `{FRONTEND_URL}/login?error=<reason>` (например: `auth_failed`, `no_code`)
+- Успех: `{FRONTEND_URL}/login?token=<jwt_token>` (Cookie `access_token` также устанавливается)
+- Ошибка: `{FRONTEND_URL}/login?error=<reason>` (например: `auth_failed`, `link_failed`)
 
 ---
 
@@ -237,9 +242,10 @@ Authorization: Bearer <token>
 
 ### GitHub Данные
 
-#### GET /github/repos
+#### GET /github/repos (или /users/repos)
 
 Получение списка репозиториев пользователя с GitHub.
+Endpoint `/users/repos` является алиасом для `/github/repos`.
 
 **Headers:**
 

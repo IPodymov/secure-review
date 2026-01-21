@@ -4,8 +4,10 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 
 	"github.com/secure-review/internal/domain"
 	"github.com/secure-review/internal/middleware"
@@ -14,13 +16,15 @@ import (
 // GitHubHandler handles GitHub OAuth endpoints
 type GitHubHandler struct {
 	githubAuthService domain.GitHubAuthService
+	tokenGenerator    domain.TokenGenerator
 	frontendURL       string
 }
 
 // NewGitHubHandler creates a new GitHubHandler
-func NewGitHubHandler(githubAuthService domain.GitHubAuthService, frontendURL string) *GitHubHandler {
+func NewGitHubHandler(githubAuthService domain.GitHubAuthService, tokenGenerator domain.TokenGenerator, frontendURL string) *GitHubHandler {
 	return &GitHubHandler{
 		githubAuthService: githubAuthService,
+		tokenGenerator:    tokenGenerator,
 		frontendURL:       frontendURL,
 	}
 }
@@ -29,6 +33,20 @@ func NewGitHubHandler(githubAuthService domain.GitHubAuthService, frontendURL st
 // GET /api/auth/github
 func (h *GitHubHandler) GetAuthURL(c *gin.Context) {
 	state := generateState()
+
+	// Check if user is already authenticated to enable linking
+	authHeader := c.GetHeader("Authorization")
+	if authHeader != "" {
+		parts := strings.Split(authHeader, " ")
+		if len(parts) == 2 && parts[0] == "Bearer" {
+			userID, err := h.tokenGenerator.ValidateToken(parts[1])
+			if err == nil {
+				// Set cookie to identify user during callback which happens on the same domain
+				c.SetCookie("github_link_user", userID.String(), 300, "/", "", false, true)
+			}
+		}
+	}
+
 	url := h.githubAuthService.GetAuthURL(state)
 	c.JSON(http.StatusOK, gin.H{
 		"url":   url,
@@ -45,14 +63,48 @@ func (h *GitHubHandler) Callback(c *gin.Context) {
 		return
 	}
 
-	response, err := h.githubAuthService.AuthenticateOrCreate(c.Request.Context(), code)
-	if err != nil {
-		c.Redirect(http.StatusFound, h.frontendURL+"/login?error=auth_failed")
-		return
+	var token string
+
+	// Check if we are in linking mode
+	linkUserIDStr, err := c.Cookie("github_link_user")
+	if err == nil && linkUserIDStr != "" {
+		// Linking mode
+		userID, err := uuid.Parse(linkUserIDStr)
+		if err == nil {
+			err = h.githubAuthService.LinkAccount(c.Request.Context(), userID, code)
+			if err != nil {
+				c.Redirect(http.StatusFound, h.frontendURL+"/login?error=link_failed")
+				return
+			}
+			// Clean up linking cookie
+			c.SetCookie("github_link_user", "", -1, "/", "", false, true)
+
+			// Generate a new token for the user to refresh session
+			token, err = h.tokenGenerator.GenerateToken(userID)
+			if err != nil {
+				c.Redirect(http.StatusFound, h.frontendURL+"/login?error=token_generation_failed")
+				return
+			}
+		} else {
+			// Invalid user ID in cookie
+			c.Redirect(http.StatusFound, h.frontendURL+"/login?error=invalid_link_state")
+			return
+		}
+	} else {
+		// Login/Register mode
+		response, err := h.githubAuthService.AuthenticateOrCreate(c.Request.Context(), code)
+		if err != nil {
+			c.Redirect(http.StatusFound, h.frontendURL+"/login?error=auth_failed")
+			return
+		}
+		token = response.Token
 	}
 
-	// Redirect to frontend with token
-	c.Redirect(http.StatusFound, h.frontendURL+"/login?token="+response.Token)
+	// Set auth cookie
+	c.SetCookie("access_token", token, 3600*24, "/", "", false, false)
+
+	// Redirect to frontend with token (keeping it in URL for compatibility, but cookie is primary now)
+	c.Redirect(http.StatusFound, h.frontendURL+"/login?token="+token)
 }
 
 // LinkAccount links GitHub account to existing user
