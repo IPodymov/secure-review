@@ -8,9 +8,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 	googleGithub "github.com/google/go-github/v69/github"
-	"github.com/google/uuid"
 
 	"github.com/secure-review/internal/domain"
+	"github.com/secure-review/internal/logger"
 	"github.com/secure-review/internal/middleware"
 )
 
@@ -21,6 +21,7 @@ type GitHubHandler struct {
 	tokenGenerator    domain.TokenGenerator
 	frontendURL       string
 	webhookSecret     []byte
+	isProduction      bool
 }
 
 // NewGitHubHandler creates a new GitHubHandler
@@ -30,6 +31,7 @@ func NewGitHubHandler(
 	tokenGenerator domain.TokenGenerator,
 	frontendURL string,
 	webhookSecret string,
+	isProduction bool,
 ) *GitHubHandler {
 	return &GitHubHandler{
 		githubAuthService: githubAuthService,
@@ -37,6 +39,7 @@ func NewGitHubHandler(
 		tokenGenerator:    tokenGenerator,
 		frontendURL:       frontendURL,
 		webhookSecret:     []byte(webhookSecret),
+		isProduction:      isProduction,
 	}
 }
 
@@ -77,63 +80,38 @@ func (h *GitHubHandler) GetAuthURL(c *gin.Context) {
 }
 
 // Callback handles the GitHub OAuth callback
-// GET /api/auth/github/callback
+// POST /api/auth/github/callback
 func (h *GitHubHandler) Callback(c *gin.Context) {
-	code := c.Query("code")
-	if code == "" {
-		c.Redirect(http.StatusFound, h.frontendURL+"/login?error=no_code")
+	var req struct {
+		Code  string `json:"code" binding:"required"`
+		State string `json:"state"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid request body: " + err.Error(),
+		})
 		return
 	}
 
-	var token string
-
-	// Check if we are in linking mode
-	linkUserIDStr, err := c.Cookie("github_link_user")
-	if err == nil && linkUserIDStr != "" {
-		// Linking mode
-		userID, err := uuid.Parse(linkUserIDStr)
-		if err == nil {
-			err = h.githubAuthService.LinkAccount(c.Request.Context(), userID, code)
-			if err != nil {
-				c.Redirect(http.StatusFound, h.frontendURL+"/login?error=link_failed")
-				return
-			}
-			// Clean up linking cookie
-			c.SetCookie("github_link_user", "", -1, "/", "", false, true)
-
-			// Generate a new token for the user to refresh session
-			token, err = h.tokenGenerator.GenerateToken(userID)
-			if err != nil {
-				c.Redirect(http.StatusFound, h.frontendURL+"/login?error=token_generation_failed")
-				return
-			}
-
-			// Set auth cookie
-			c.SetCookie("access_token", token, 3600*24, "/", "", false, false)
-
-			// Redirect to profile for linked account
-			c.Redirect(http.StatusFound, h.frontendURL+"/profile?status=github_linked")
-			return
-		} else {
-			// Invalid user ID in cookie
-			c.Redirect(http.StatusFound, h.frontendURL+"/login?error=invalid_link_state")
-			return
-		}
-	} else {
-		// Login/Register mode
-		response, err := h.githubAuthService.AuthenticateOrCreate(c.Request.Context(), code)
-		if err != nil {
-			c.Redirect(http.StatusFound, h.frontendURL+"/login?error=auth_failed")
-			return
-		}
-		token = response.Token
+	response, err := h.githubAuthService.AuthenticateOrCreate(c.Request.Context(), req.Code)
+	if err != nil {
+		logger.Log.Error("GitHub authentication failed", "error", err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Authentication failed: " + err.Error(),
+		})
+		return
 	}
 
 	// Set auth cookie
-	c.SetCookie("access_token", token, 3600*24, "/", "", false, false)
+	if h.isProduction {
+		c.SetSameSite(http.SameSiteNoneMode)
+	} else {
+		c.SetSameSite(http.SameSiteLaxMode)
+	}
+	c.SetCookie("access_token", response.Token, 3600*24, "/", "", h.isProduction, true)
 
-	// Redirect to frontend with token (keeping it in URL for compatibility, but cookie is primary now)
-	c.Redirect(http.StatusFound, h.frontendURL+"/login?token="+token)
+	c.JSON(http.StatusOK, response)
 }
 
 // LinkAccount links GitHub account to existing user

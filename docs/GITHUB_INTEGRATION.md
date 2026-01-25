@@ -15,8 +15,8 @@ GitHub App является предпочтительным способом и
 2. Нажмите **"New GitHub App"**.
 3. Заполните основные поля:
    - **GitHub App name**: `Secure Review (Dev)`
-   - **Homepage URL**: `http://localhost:3000`
-   - **Callback URL**: `http://localhost:8080/api/v1/auth/github/callback`
+   - **Homepage URL**: `http://localhost:5173`
+   - **Callback URL**: `http://localhost:5173/auth/github/callback` (URL фронтенда!)
    - **Webhook URL**: `http://localhost:8080/api/v1/github/webhook` (для локальной разработки используйте ngrok или аналоги)
    - **Webhook Secret**: Генерируйте случайную строку (запишите её, она понадобится в `.env`).
 
@@ -55,10 +55,10 @@ GITHUB_WEBHOOK_SECRET=your_webhook_secret
 # GitHub OAuth Configuration (используется Client ID/Secret от того же GitHub App)
 GITHUB_CLIENT_ID=Iv1.xxxxxxxxxxx
 GITHUB_CLIENT_SECRET=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-GITHUB_REDIRECT_URL=http://localhost:8080/api/v1/auth/github/callback
+GITHUB_REDIRECT_URL=http://localhost:5173/auth/github/callback
 ```
 
-> **Важно:** `GITHUB_APP_PRIVATE_KEY` должен быть передан одной строкой с `\n` вместо переносов строк, если вы используете .env файл, либо через механизм секретов вашей платформы деплоя.
+> **Важно:** `GITHUB_REDIRECT_URL` должен указывать на ваш **Frontend**, а не на Backend. Фронтенд принимает `code` и отправляет его POST-запросом на `/api/v1/auth/github/callback` бэкенда.
 
 ## 3. Установка приложения
 

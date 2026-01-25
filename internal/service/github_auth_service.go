@@ -17,6 +17,7 @@ import (
 	"golang.org/x/oauth2/github"
 
 	"github.com/secure-review/internal/domain"
+	"github.com/secure-review/internal/logger"
 )
 
 var _ domain.GitHubAuthService = (*GitHubAuthServiceImpl)(nil)
@@ -57,8 +58,10 @@ func (s *GitHubAuthServiceImpl) GetAuthURL(state string) string {
 
 // ExchangeCode exchanges an authorization code for an access token
 func (s *GitHubAuthServiceImpl) ExchangeCode(ctx context.Context, code string) (string, error) {
+	logger.Log.Info("Exchanging GitHub code for token")
 	token, err := s.oauth2Config.Exchange(ctx, code)
 	if err != nil {
+		logger.Log.Error("Failed to exchange GitHub code", "error", err)
 		return "", fmt.Errorf("failed to exchange code: %w", err)
 	}
 	return token.AccessToken, nil
@@ -66,6 +69,7 @@ func (s *GitHubAuthServiceImpl) ExchangeCode(ctx context.Context, code string) (
 
 // GetUser fetches the GitHub user info using an access token
 func (s *GitHubAuthServiceImpl) GetUser(ctx context.Context, accessToken string) (*domain.GitHubUser, error) {
+	logger.Log.Info("Fetching GitHub user info")
 	req, err := http.NewRequestWithContext(ctx, "GET", "https://api.github.com/user", nil)
 	if err != nil {
 		return nil, err
@@ -76,7 +80,15 @@ func (s *GitHubAuthServiceImpl) GetUser(ctx context.Context, accessToken string)
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
+		logger.Log.Error("Failed to fetch GitHub user", "error", err)
 		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		logger.Log.Error("GitHub API error", "status", resp.StatusCode, "body", string(body))
+		return nil, fmt.Errorf("github api error: %s", resp.Status)
 	}
 	defer resp.Body.Close()
 

@@ -80,7 +80,7 @@ func (r *Router) Setup() *gin.Engine {
 
 			// GitHub OAuth
 			auth.GET("/github", r.githubHandler.GetAuthURL)
-			auth.GET("/github/callback", r.githubHandler.Callback)
+			auth.POST("/github/callback", r.githubHandler.Callback)
 		}
 
 		// GitHub Webhooks

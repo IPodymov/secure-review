@@ -106,10 +106,10 @@ JWT_EXPIRATION_HOURS=24
 OPENAI_API_KEY=sk-...
 OPENAI_MODEL=gpt-4
 
-# GitHub OAuth (обновите URL на продакшен)
+# GitHub OAuth (обновите URL на продакшен фронтенд)
 GITHUB_CLIENT_ID=...
 GITHUB_CLIENT_SECRET=...
-GITHUB_REDIRECT_URL=https://api.yourdomain.com/api/v1/auth/github/callback
+GITHUB_REDIRECT_URL=https://yourdomain.com/auth/github/callback
 
 # GitHub App
 GITHUB_APP_ID=123456
