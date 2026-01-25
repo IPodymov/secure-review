@@ -211,6 +211,31 @@ func (h *GitHubHandler) ListRepositories(c *gin.Context) {
 	c.JSON(http.StatusOK, repos)
 }
 
+// ListBranches lists branches for a repository
+// GET /api/v1/github/repos/:owner/:repo/branches
+func (h *GitHubHandler) ListBranches(c *gin.Context) {
+	userID, ok := middleware.GetUserID(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "Unauthorized",
+		})
+		return
+	}
+
+	owner := c.Param("owner")
+	repo := c.Param("repo")
+
+	branches, err := h.githubAuthService.ListBranches(c.Request.Context(), userID, owner, repo)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to list branches: " + err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, branches)
+}
+
 func generateState() string {
 	b := make([]byte, 16)
 	rand.Read(b)

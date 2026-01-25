@@ -24,6 +24,8 @@ type GitHubAuthService interface {
 	LinkAccount(ctx context.Context, userID uuid.UUID, code string) error
 	UnlinkAccount(ctx context.Context, userID uuid.UUID) error
 	ListRepositories(ctx context.Context, userID uuid.UUID) ([]Repository, error)
+	ListBranches(ctx context.Context, userID uuid.UUID, owner, repo string) ([]string, error)
+	GetRepositoryContent(ctx context.Context, userID uuid.UUID, owner, repo, ref string) (string, error)
 }
 
 // Repository represents a GitHub repository

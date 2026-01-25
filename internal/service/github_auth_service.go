@@ -1,11 +1,15 @@
 package service
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"path/filepath"
+	"strings"
 
 	googleGithub "github.com/google/go-github/v69/github"
 	"github.com/google/uuid"
@@ -310,4 +314,183 @@ func (s *GitHubAuthServiceImpl) ListRepositories(ctx context.Context, userID uui
 	}
 
 	return result, nil
+}
+
+// ListBranches lists branches for a repository
+func (s *GitHubAuthServiceImpl) ListBranches(ctx context.Context, userID uuid.UUID, owner, repo string) ([]string, error) {
+	user, err := s.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		return nil, domain.ErrUserNotFound
+	}
+
+	if user.GitHubAccessToken == nil || *user.GitHubAccessToken == "" {
+		return nil, fmt.Errorf("GitHub account not linked or token missing")
+	}
+
+	client := googleGithub.NewClient(nil).WithAuthToken(*user.GitHubAccessToken)
+
+	opts := &googleGithub.BranchListOptions{
+		ListOptions: googleGithub.ListOptions{PerPage: 100},
+	}
+
+	var allBranches []*googleGithub.Branch
+	for {
+		branches, resp, err := client.Repositories.ListBranches(ctx, owner, repo, opts)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch branches: %w", err)
+		}
+		allBranches = append(allBranches, branches...)
+		if resp.NextPage == 0 {
+			break
+		}
+		opts.Page = resp.NextPage
+	}
+
+	var result []string
+	for _, b := range allBranches {
+		if b.Name != nil {
+			result = append(result, *b.Name)
+		}
+	}
+
+	return result, nil
+}
+
+// GetRepositoryContent fetches the repository content as a single string
+func (s *GitHubAuthServiceImpl) GetRepositoryContent(ctx context.Context, userID uuid.UUID, owner, repo, ref string) (string, error) {
+	user, err := s.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		return "", domain.ErrUserNotFound
+	}
+
+	if user.GitHubAccessToken == nil || *user.GitHubAccessToken == "" {
+		return "", fmt.Errorf("GitHub account not linked or token missing")
+	}
+
+	client := googleGithub.NewClient(nil).WithAuthToken(*user.GitHubAccessToken)
+
+	// Get archive link
+	opts := &googleGithub.RepositoryContentGetOptions{
+		Ref: ref,
+	}
+	url, resp, err := client.Repositories.GetArchiveLink(ctx, owner, repo, googleGithub.Zipball, opts, 5)
+	if err != nil {
+		// handle redirect manually if needed, but GetArchiveLink with true should follow or return url
+		return "", fmt.Errorf("failed to get archive link: %w", err)
+	}
+	// resp.Location is usually where it redirects, but client might return it in url
+	downloadURL := url.String()
+	if downloadURL == "" && resp != nil {
+		downloadURL = resp.Header.Get("Location")
+	}
+	if downloadURL == "" {
+		return "", fmt.Errorf("failed to determine download URL")
+	}
+
+	// Download zip
+	req, err := http.NewRequestWithContext(ctx, "GET", downloadURL, nil)
+	if err != nil {
+		return "", err
+	}
+
+	httpClient := &http.Client{}
+	dlResp, err := httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to download archive: %w", err)
+	}
+	defer dlResp.Body.Close()
+
+	if dlResp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("failed to download archive: status %d", dlResp.StatusCode)
+	}
+
+	bodyBytes, err := io.ReadAll(dlResp.Body)
+	if err != nil {
+		return "", err
+	}
+
+	// Unzip and filter
+	zipReader, err := zip.NewReader(bytes.NewReader(bodyBytes), int64(len(bodyBytes)))
+	if err != nil {
+		return "", fmt.Errorf("failed to open zip archive: %w", err)
+	}
+
+	var sb strings.Builder
+	for _, file := range zipReader.File {
+		if file.FileInfo().IsDir() {
+			continue
+		}
+
+		// Skip unwanted files and directories
+		if shouldSkipFile(file.Name) {
+			continue
+		}
+
+		// Limit file size (skip large files, e.g. > 100KB)
+		if file.FileInfo().Size() > 100*1024 {
+			continue
+		}
+
+		f, err := file.Open()
+		if err != nil {
+			continue
+		}
+
+		content, err := io.ReadAll(f)
+		f.Close()
+		if err != nil {
+			continue
+		}
+
+		// Basic check if file is text
+		if !isText(content) {
+			continue
+		}
+
+		sb.WriteString(fmt.Sprintf("\n--- File: %s ---\n", file.Name))
+		sb.WriteString(string(content))
+		sb.WriteString("\n")
+	}
+
+	if sb.Len() == 0 {
+		return "", fmt.Errorf("no suitable source files found in repository")
+	}
+
+	return sb.String(), nil
+}
+
+func shouldSkipFile(path string) bool {
+	// Simple filters
+	if strings.Contains(path, "node_modules/") ||
+		strings.Contains(path, ".git/") ||
+		strings.Contains(path, "vendor/") ||
+		strings.Contains(path, ".idea/") ||
+		strings.Contains(path, ".vscode/") ||
+		strings.Contains(path, "dist/") ||
+		strings.Contains(path, "build/") {
+		return true
+	}
+
+	ext := strings.ToLower(filepath.Ext(path))
+	allowedExts := map[string]bool{
+		".go": true, ".js": true, ".ts": true, ".py": true, ".java": true,
+		".c": true, ".cpp": true, ".h": true, ".hpp": true, ".rb": true,
+		".php": true, ".cs": true, ".rs": true, ".swift": true, ".kt": true,
+		".html": true, ".css": true, ".json": true, ".yaml": true, ".yml": true,
+		".sql": true, ".md": true,
+	}
+	return !allowedExts[ext]
+}
+
+func isText(b []byte) bool {
+	// Simple heuristic: check for null bytes
+	if len(b) > 1024 {
+		b = b[:1024]
+	}
+	for _, c := range b {
+		if c == 0 {
+			return false
+		}
+	}
+	return true
 }

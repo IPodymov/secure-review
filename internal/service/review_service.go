@@ -15,29 +15,69 @@ var _ domain.ReviewService = (*ReviewServiceImpl)(nil)
 
 // ReviewServiceImpl implements the ReviewService interface
 type ReviewServiceImpl struct {
-	reviewRepo   domain.ReviewRepository
-	codeAnalyzer domain.CodeAnalyzer
+	reviewRepo        domain.ReviewRepository
+	codeAnalyzer      domain.CodeAnalyzer
+	githubAuthService domain.GitHubAuthService
 }
 
 // NewReviewService creates a new ReviewServiceImpl
-func NewReviewService(reviewRepo domain.ReviewRepository, codeAnalyzer domain.CodeAnalyzer) *ReviewServiceImpl {
+func NewReviewService(
+	reviewRepo domain.ReviewRepository,
+	codeAnalyzer domain.CodeAnalyzer,
+	githubAuthService domain.GitHubAuthService,
+) *ReviewServiceImpl {
 	return &ReviewServiceImpl{
-		reviewRepo:   reviewRepo,
-		codeAnalyzer: codeAnalyzer,
+		reviewRepo:        reviewRepo,
+		codeAnalyzer:      codeAnalyzer,
+		githubAuthService: githubAuthService,
 	}
 }
 
 // Create creates a new code review
 func (s *ReviewServiceImpl) Create(ctx context.Context, userID uuid.UUID, input *domain.CreateReviewInput) (*domain.ReviewResponse, error) {
+	var code string
+	var language string
+
+	// Handle GitHub repository source
+	if input.RepoName != nil && input.RepoOwner != nil && input.RepoBranch != nil {
+		content, err := s.githubAuthService.GetRepositoryContent(
+			ctx,
+			userID,
+			*input.RepoOwner,
+			*input.RepoName,
+			*input.RepoBranch,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch repository content: %w", err)
+		}
+		code = content
+		// Try to infer language if not provided, or just set as Mixed/Repo
+		if input.Language != "" {
+			language = input.Language
+		} else {
+			language = "Mixed (Repository)"
+		}
+	} else if input.Code != nil {
+		code = *input.Code
+		language = input.Language
+	} else {
+		return nil, fmt.Errorf("either code or repository details must be provided")
+	}
+
+	if code == "" {
+		return nil, fmt.Errorf("code content is empty")
+	}
+
 	review := &domain.CodeReview{
-		ID:        uuid.New(),
-		UserID:    userID,
-		Title:     input.Title,
-		Code:      input.Code,
-		Language:  input.Language,
-		Status:    domain.ReviewStatusPending,
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		ID:           uuid.New(),
+		UserID:       userID,
+		Title:        input.Title,
+		Code:         code,
+		Language:     language,
+		Status:       domain.ReviewStatusPending,
+		CustomPrompt: input.CustomPrompt,
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
 	}
 
 	if err := s.reviewRepo.Create(ctx, review); err != nil {
@@ -157,8 +197,9 @@ func (s *ReviewServiceImpl) analyzeCode(ctx context.Context, review *domain.Code
 	_ = s.reviewRepo.Update(ctx, review)
 
 	result, err := s.codeAnalyzer.AnalyzeCode(ctx, &domain.AnalysisRequest{
-		Code:     review.Code,
-		Language: review.Language,
+		Code:         review.Code,
+		Language:     review.Language,
+		CustomPrompt: review.CustomPrompt,
 	})
 
 	if err != nil {

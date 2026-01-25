@@ -78,7 +78,7 @@ func main() {
 		userRepo,
 		tokenGenerator,
 	)
-	reviewService := service.NewReviewService(reviewRepo, codeAnalyzer)
+	reviewService := service.NewReviewService(reviewRepo, codeAnalyzer, githubAuthService)
 
 	// Initialize handlers
 	authHandler := handler.NewAuthHandler(authService)
