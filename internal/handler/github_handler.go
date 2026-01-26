@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	googleGithub "github.com/google/go-github/v69/github"
+	"github.com/google/uuid"
 
 	"github.com/secure-review/internal/domain"
 	"github.com/secure-review/internal/logger"
@@ -123,6 +124,36 @@ func (h *GitHubHandler) CallbackRedirect(c *gin.Context) {
 		return
 	}
 
+	// 1. ПРОВЕРКА НА ПРИВЯЗКУ (LINKING)
+	// Читаем cookie, которую поставили в GetAuthURL
+	linkUserID, err := c.Cookie("github_link_user")
+	isLinking := err == nil && linkUserID != ""
+
+	if isLinking {
+		// Парсим ID пользователя
+		userID, err := uuid.Parse(linkUserID)
+		if err == nil {
+			// Вызываем явную ПРИВЯЗКУ, передавая userID и code
+			// Обратите внимание: метод LinkAccount должен быть доступен в интерфейсе сервиса
+			err = h.githubAuthService.LinkAccount(c.Request.Context(), userID, code)
+
+			// Очищаем cookie намерения
+			c.SetCookie("github_link_user", "", -1, "/", "", false, true)
+
+			if err != nil {
+				// Если ошибка (например, этот GitHub уже занят)
+				logger.Log.Error("GitHub link failed", "error", err)
+				c.Redirect(http.StatusFound, h.frontendURL+"/profile?error=link_failed")
+				return
+			}
+
+			// Успех -> Редирект в профиль со статусом
+			c.Redirect(http.StatusFound, h.frontendURL+"/profile?status=github_linked")
+			return
+		}
+	}
+
+	// 2. ОБЫЧНЫЙ ВХОД (LOGIN / REGISTRATION)
 	response, err := h.githubAuthService.AuthenticateOrCreate(c.Request.Context(), code)
 	if err != nil {
 		logger.Log.Error("GitHub authentication failed (GET)", "error", err)
@@ -130,7 +161,7 @@ func (h *GitHubHandler) CallbackRedirect(c *gin.Context) {
 		return
 	}
 
-	// Set auth cookie
+	// Сохраняем токен и редиректим на логин
 	if h.isProduction {
 		c.SetSameSite(http.SameSiteNoneMode)
 	} else {
@@ -138,8 +169,8 @@ func (h *GitHubHandler) CallbackRedirect(c *gin.Context) {
 	}
 	c.SetCookie("access_token", response.Token, 3600*24, "/", "", h.isProduction, true)
 
-	// Redirect to frontend (home or dashboard)
-	c.Redirect(http.StatusFound, h.frontendURL)
+	// Важно передать token в URL для фронтенда
+	c.Redirect(http.StatusFound, h.frontendURL+"/login?token="+response.Token)
 }
 
 // LinkAccount links GitHub account to existing user
