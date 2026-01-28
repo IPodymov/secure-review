@@ -251,7 +251,7 @@ func (s *ReviewServiceImpl) analyzeCode(ctx context.Context, review *domain.Code
 
 	// Format the result to include score, summary and suggestions
 	var resultBuilder strings.Builder
-	resultBuilder.WriteString(fmt.Sprintf("# Analysis Result\n\n"))
+	resultBuilder.WriteString("# Analysis Result\n\n")
 	resultBuilder.WriteString(fmt.Sprintf("**Overall Safe Score:** %d/100\n\n", result.OverallScore))
 
 	resultBuilder.WriteString("## Summary\n")

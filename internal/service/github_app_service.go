@@ -57,7 +57,8 @@ func (s *GitHubAppServiceImpl) handleInstallationEvent(ctx context.Context, even
 	action := event.GetAction()
 	installationID := event.GetInstallation().GetID()
 
-	if action == "created" || action == "unsuspend" {
+	switch action {
+	case "created", "unsuspend":
 		account := event.GetInstallation().GetAccount()
 		sender := event.GetSender()
 
@@ -84,7 +85,7 @@ func (s *GitHubAppServiceImpl) handleInstallationEvent(ctx context.Context, even
 		}
 		return s.installationRepo.Create(ctx, installation)
 
-	} else if action == "deleted" || action == "suspend" {
+	case "deleted", "suspend":
 		return s.installationRepo.DeleteByInstallationID(ctx, installationID)
 	}
 
