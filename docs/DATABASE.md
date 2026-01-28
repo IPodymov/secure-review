@@ -40,6 +40,7 @@ type CodeReview struct {
     Language       string          `gorm:"size:50;not null"`
     Status         ReviewStatus    `gorm:"size:20;default:'pending'"`
     Result         *string         `gorm:"type:text"`
+    CustomPrompt   *string         `gorm:"type:text"` // Пользовательский промпт
     CreatedAt      time.Time       `gorm:"autoCreateTime"`
     UpdatedAt      time.Time       `gorm:"autoUpdateTime"`
     CompletedAt    *time.Time
