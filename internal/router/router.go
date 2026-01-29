@@ -1,11 +1,15 @@
 package router
 
 import (
+	"net/http"
 	"time"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 
+	_ "github.com/secure-review/docs" // Init swagger docs
 	"github.com/secure-review/internal/config"
 	"github.com/secure-review/internal/handler"
 	"github.com/secure-review/internal/middleware"
@@ -55,6 +59,14 @@ func (r *Router) Setup() *gin.Engine {
 	engine.Use(middleware.Recovery())
 	engine.Use(middleware.Logger())
 
+	// Swagger
+	engine.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+
+	// Redirect root to swagger
+	engine.GET("/", func(c *gin.Context) {
+		c.Redirect(http.StatusMovedPermanently, "/swagger/index.html")
+	})
+
 	// CORS setup
 	engine.Use(cors.New(cors.Config{
 		AllowOrigins:     []string{r.config.Frontend.URL},
@@ -80,7 +92,14 @@ func (r *Router) Setup() *gin.Engine {
 
 			// GitHub OAuth
 			auth.GET("/github", r.githubHandler.GetAuthURL)
-			auth.GET("/github/callback", r.githubHandler.Callback)
+			auth.POST("/github/callback", r.githubHandler.Callback)
+			auth.GET("/github/callback", r.githubHandler.CallbackRedirect) // Обработка редиректа от GitHub (Plan B)
+		}
+
+		// GitHub Webhooks
+		githubPublic := api.Group("/github")
+		{
+			githubPublic.POST("/webhook", r.githubHandler.Webhook)
 		}
 
 		// Protected auth routes
@@ -108,6 +127,7 @@ func (r *Router) Setup() *gin.Engine {
 		gh.Use(r.authMiddleware.RequireAuth())
 		{
 			gh.GET("/repos", r.githubHandler.ListRepositories)
+			gh.GET("/repos/:owner/:repo/branches", r.githubHandler.ListBranches)
 		}
 
 		// Review routes (auth required)

@@ -11,6 +11,7 @@ import (
 
 	"github.com/secure-review/internal/config"
 	"github.com/secure-review/internal/database"
+	"github.com/secure-review/internal/entity"
 	"github.com/secure-review/internal/handler"
 	"github.com/secure-review/internal/logger"
 	"github.com/secure-review/internal/middleware"
@@ -20,6 +21,26 @@ import (
 )
 
 const version = "1.0.0"
+
+// @title           Secure Code Review API
+// @version         1.0
+// @description     This is the API for the Secure Code Review service.
+// @termsOfService  http://swagger.io/terms/
+
+// @contact.name    API Support
+// @contact.url     http://www.swagger.io/support
+// @contact.email   support@swagger.io
+
+// @license.name    Apache 2.0
+// @license.url     http://www.apache.org/licenses/LICENSE-2.0.html
+
+// @host            localhost:8080
+// @BasePath        /api/v1
+// @schemes         http https
+
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
 
 func main() {
 	// Load configuration
@@ -49,7 +70,12 @@ func main() {
 	logger.Info("Connected to database via GORM")
 
 	// Run auto migrations (аналог TypeORM synchronize: true)
-	if err := db.AutoMigrate(); err != nil {
+	if err := db.DB.AutoMigrate(
+		&entity.User{},
+		&entity.CodeReview{},
+		&entity.SecurityIssue{},
+		&entity.GitHubInstallation{},
+	); err != nil {
 		logger.Error("Failed to run auto migrations", "error", err)
 		os.Exit(1)
 	}
@@ -59,6 +85,7 @@ func main() {
 	// Initialize repositories with adapters (аналог getRepository() в TypeORM)
 	userRepo := repository.NewUserRepositoryAdapter(db.DB)
 	reviewRepo := repository.NewReviewRepositoryAdapter(db.DB)
+	installationRepo := repository.NewGitHubInstallationRepositoryAdapter(db.DB)
 
 	// Initialize services
 	passwordHasher := service.NewBcryptPasswordHasher()
@@ -71,18 +98,33 @@ func main() {
 
 	authService := service.NewAuthService(userRepo, passwordHasher, tokenGenerator)
 	userService := service.NewUserService(userRepo)
+	githubAppService := service.NewGitHubAppService(
+		cfg.GitHub.AppID,
+		cfg.GitHub.AppPrivateKey,
+		cfg.GitHub.WebhookSecret,
+		installationRepo,
+		userRepo,
+	)
 	githubAuthService := service.NewGitHubAuthService(
 		cfg.GitHub.ClientID,
 		cfg.GitHub.ClientSecret,
 		cfg.GitHub.RedirectURL,
 		userRepo,
 		tokenGenerator,
+		githubAppService,
 	)
-	reviewService := service.NewReviewService(reviewRepo, codeAnalyzer)
+	reviewService := service.NewReviewService(reviewRepo, codeAnalyzer, githubAuthService)
 
 	// Initialize handlers
 	authHandler := handler.NewAuthHandler(authService)
-	githubHandler := handler.NewGitHubHandler(githubAuthService, tokenGenerator, cfg.Frontend.URL)
+	githubHandler := handler.NewGitHubHandler(
+		githubAuthService,
+		githubAppService,
+		tokenGenerator,
+		cfg.Frontend.URL,
+		cfg.GitHub.WebhookSecret,
+		cfg.Server.Mode == "release",
+	)
 	userHandler := handler.NewUserHandler(userService)
 	reviewHandler := handler.NewReviewHandler(reviewService)
 	healthHandler := handler.NewHealthHandler(version)

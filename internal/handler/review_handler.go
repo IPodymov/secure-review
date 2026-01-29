@@ -25,7 +25,18 @@ func NewReviewHandler(reviewService domain.ReviewService) *ReviewHandler {
 }
 
 // CreateReview creates a new code review
-// POST /api/reviews
+// @Summary      Create a code review
+// @Description  Create a new code review request with manual code or GitHub repository
+// @Tags         reviews
+// @Accept       json
+// @Produce      json
+// @Param        input  body      domain.CreateReviewInput  true  "Review input"
+// @Success      201    {object}  domain.ReviewResponse
+// @Failure      400    {object}  map[string]string
+// @Failure      401    {object}  map[string]string
+// @Failure      500    {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /reviews [post]
 func (h *ReviewHandler) CreateReview(c *gin.Context) {
 	userID, ok := middleware.GetUserID(c)
 	if !ok {
@@ -56,7 +67,20 @@ func (h *ReviewHandler) CreateReview(c *gin.Context) {
 }
 
 // GetReview returns a specific review
-// GET /api/reviews/:id
+// @Summary      Get a review
+// @Description  Get a code review by ID
+// @Tags         reviews
+// @Accept       json
+// @Produce      json
+// @Param        id     path      string  true  "Review ID"
+// @Success      200    {object}  domain.ReviewResponse
+// @Failure      400    {object}  map[string]string
+// @Failure      401    {object}  map[string]string
+// @Failure      403    {object}  map[string]string
+// @Failure      404    {object}  map[string]string
+// @Failure      500    {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /reviews/{id} [get]
 func (h *ReviewHandler) GetReview(c *gin.Context) {
 	userID, ok := middleware.GetUserID(c)
 	if !ok {

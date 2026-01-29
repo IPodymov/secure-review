@@ -15,11 +15,11 @@ type User struct {
     Email        string         `gorm:"size:255;uniqueIndex;not null"`
     Username     string         `gorm:"size:100;not null"`
     PasswordHash string         `gorm:"size:255"`
-    GitHubID          *int64         `gorm:"index"`
-    GitHubLogin       *string        `gorm:"size:100"`
-    AvatarURL         *string        `gorm:"size:500"`
-    GitHubAccessToken *string        `gorm:"size:255"` // Токен доступа к GitHub API
-    IsActive          bool           `gorm:"default:true"`
+    GitHubID          *int64  `gorm:"column:github_id;index"`
+    GitHubLogin       *string `gorm:"column:github_login;size:100"`
+    AvatarURL         *string `gorm:"column:avatar_url;size:500"`
+    GitHubAccessToken *string `gorm:"column:github_access_token;size:255"` // Токен доступа к GitHub API
+    IsActive          bool    `gorm:"default:true"`
     CreatedAt    time.Time      `gorm:"autoCreateTime"`
     UpdatedAt    time.Time      `gorm:"autoUpdateTime"`
     DeletedAt    gorm.DeletedAt `gorm:"index"` // Soft Delete
@@ -40,6 +40,7 @@ type CodeReview struct {
     Language       string          `gorm:"size:50;not null"`
     Status         ReviewStatus    `gorm:"size:20;default:'pending'"`
     Result         *string         `gorm:"type:text"`
+    CustomPrompt   *string         `gorm:"type:text"` // Пользовательский промпт
     CreatedAt      time.Time       `gorm:"autoCreateTime"`
     UpdatedAt      time.Time       `gorm:"autoUpdateTime"`
     CompletedAt    *time.Time
@@ -67,7 +68,46 @@ type SecurityIssue struct {
 }
 ```
 
+### GitHubInstallation Entity
+
+```go
+// internal/entity/github_installation.go
+type GitHubInstallation struct {
+    ID             uuid.UUID      `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+    InstallationID int64          `gorm:"index;unique"` // ID установки от GitHub
+    AccountID      int64          `gorm:"index"`        // ID пользователя/организации GitHub
+    AccountLogin   string         `gorm:"size:255"`
+    AccountType    string         `gorm:"size:50"`      // "User" или "Organization"
+    UserID         *uuid.UUID     `gorm:"type:uuid;index"` // Связь с локальным пользователем
+    User           *User          `gorm:"foreignKey:UserID"`
+    CreatedAt      time.Time      `gorm:"autoCreateTime"`
+    UpdatedAt      time.Time      `gorm:"autoUpdateTime"`
+    DeletedAt      gorm.DeletedAt `gorm:"index"`
+}
+```
+
 ## Таблицы (SQL)
+
+### github_installations
+
+Таблица установок GitHub App.
+
+```sql
+CREATE TABLE github_installations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    installation_id BIGINT UNIQUE,
+    account_id BIGINT,
+    account_login VARCHAR(255),
+    account_type VARCHAR(50),
+    user_id UUID REFERENCES users(id),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    deleted_at TIMESTAMP WITH TIME ZONE
+);
+
+CREATE INDEX idx_github_installations_installation_id ON github_installations(installation_id);
+CREATE INDEX idx_github_installations_account_id ON github_installations(account_id);
+```
 
 ### users
 
@@ -79,9 +119,10 @@ CREATE TABLE users (
     email VARCHAR(255) UNIQUE NOT NULL,
     username VARCHAR(50) NOT NULL,
     password_hash VARCHAR(255),
-    github_id BIGINT UNIQUE,
-    github_login VARCHAR(255),
-    avatar_url TEXT,
+    github_id BIGINT,
+    github_login VARCHAR(100),
+    avatar_url VARCHAR(500),
+    github_access_token VARCHAR(255),
     is_active BOOLEAN DEFAULT true,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL
