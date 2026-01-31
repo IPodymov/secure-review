@@ -98,7 +98,11 @@ func main() {
 		time.Duration(cfg.JWT.ExpirationHours)*time.Hour,
 		time.Duration(cfg.JWT.ExpirationHours*7)*time.Hour,
 	)
-	codeAnalyzer := analyzer.NewCopilotCodeAnalyzer(cfg.Copilot.APIKey, cfg.Copilot.Model)
+	codeAnalyzer := analyzer.NewCopilotCodeAnalyzer(
+		cfg.Copilot.APIKey,
+		cfg.Copilot.Model,
+		cfg.Copilot.APIURL,
+	)
 
 	authService := auth.NewAuthService(userRepo, passwordHasher, tokenGenerator)
 	userService := user.NewUserService(userRepo)

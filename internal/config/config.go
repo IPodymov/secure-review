@@ -48,6 +48,7 @@ type JWTConfig struct {
 type CopilotConfig struct {
 	APIKey string
 	Model  string
+	APIURL string
 }
 
 // GitHubConfig holds GitHub OAuth configuration
@@ -107,6 +108,7 @@ func Load() (*Config, error) {
 		Copilot: CopilotConfig{
 			APIKey: getEnv("COPILOT_API_KEY", ""),
 			Model:  getEnv("COPILOT_MODEL", "gpt-4o"),
+			APIURL: getEnv("COPILOT_API_URL", "https://models.inference.ai.azure.com/chat/completions"),
 		},
 		GitHub: GitHubConfig{
 			ClientID:      getEnv("GITHUB_CLIENT_ID", ""),

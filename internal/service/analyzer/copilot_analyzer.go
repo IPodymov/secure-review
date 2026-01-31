@@ -15,8 +15,6 @@ import (
 var _ domain.CodeAnalyzer = (*CopilotCodeAnalyzer)(nil)
 
 const (
-	// GitHub Copilot API endpoint
-	copilotAPIEndpoint = "https://api.githubcopilot.com/chat/completions"
 	// Default model for Copilot
 	defaultCopilotModel = "gpt-4o"
 )
@@ -25,17 +23,23 @@ const (
 type CopilotCodeAnalyzer struct {
 	apiKey string
 	model  string
+	apiURL string
 	client *http.Client
 }
 
 // NewCopilotCodeAnalyzer creates a new CopilotCodeAnalyzer
-func NewCopilotCodeAnalyzer(apiKey, model string) *CopilotCodeAnalyzer {
+func NewCopilotCodeAnalyzer(apiKey, model, apiURL string) *CopilotCodeAnalyzer {
 	if model == "" {
 		model = defaultCopilotModel
+	}
+	// Use default endpoint if not provided, but we expect it to be passed from config now
+	if apiURL == "" {
+		apiURL = "https://models.inference.ai.azure.com/chat/completions"
 	}
 	return &CopilotCodeAnalyzer{
 		apiKey: apiKey,
 		model:  model,
+		apiURL: apiURL,
 		client: &http.Client{},
 	}
 }
@@ -187,13 +191,15 @@ func (a *CopilotCodeAnalyzer) sendRequest(ctx context.Context, userPrompt, syste
 		return "", fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", copilotAPIEndpoint, bytes.NewBuffer(jsonBody))
+	req, err := http.NewRequestWithContext(ctx, "POST", a.apiURL, bytes.NewBuffer(jsonBody))
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+a.apiKey)
+	// GitHub Models might require explicit model name header or different handling, but usually Bearer is enough.
+	// Some docs suggest `Authorization: Bearer <token>` is sufficient for models.inference.ai.azure.com
 
 	resp, err := a.client.Do(req)
 	if err != nil {
