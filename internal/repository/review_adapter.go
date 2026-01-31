@@ -142,10 +142,12 @@ func domainIssueToEntity(issue *domain.SecurityIssue) *entity.SecurityIssue {
 		Severity:    entity.SecuritySeverity(issue.Severity),
 		Title:       issue.Title,
 		Description: issue.Description,
+		FilePath:    issue.FilePath,
 		LineStart:   issue.LineStart,
 		LineEnd:     issue.LineEnd,
 		Suggestion:  issue.Suggestion,
 		CWE:         issue.CWE,
+		CodeSnippet: issue.CodeSnippet,
 		CreatedAt:   issue.CreatedAt,
 	}
 }
@@ -157,10 +159,12 @@ func entityIssueToDomain(issue *entity.SecurityIssue) *domain.SecurityIssue {
 		Severity:    domain.SecuritySeverity(issue.Severity),
 		Title:       issue.Title,
 		Description: issue.Description,
+		FilePath:    issue.FilePath,
 		LineStart:   issue.LineStart,
 		LineEnd:     issue.LineEnd,
 		Suggestion:  issue.Suggestion,
 		CWE:         issue.CWE,
+		CodeSnippet: issue.CodeSnippet,
 		CreatedAt:   issue.CreatedAt,
 	}
 }

@@ -2,6 +2,7 @@ package router
 
 import (
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-contrib/cors"
@@ -68,8 +69,29 @@ func (r *Router) Setup() *gin.Engine {
 	})
 
 	// CORS setup
+	allowOrigins := strings.Split(r.config.Frontend.URL, ",")
+	var cleanOrigins []string
+	for _, origin := range allowOrigins {
+		trimmed := strings.TrimSpace(origin)
+		if trimmed != "" {
+			cleanOrigins = append(cleanOrigins, trimmed)
+		}
+	}
+
+	// Add localhost for development if not present
+	hasLocalhost := false
+	for _, origin := range cleanOrigins {
+		if origin == "http://localhost:3000" {
+			hasLocalhost = true
+			break
+		}
+	}
+	if !hasLocalhost {
+		cleanOrigins = append(cleanOrigins, "http://localhost:3000")
+	}
+
 	engine.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{r.config.Frontend.URL},
+		AllowOrigins:     cleanOrigins,
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Content-Length", "Accept-Encoding", "X-CSRF-Token", "Authorization", "Accept", "Cache-Control", "X-Requested-With"},
 		ExposeHeaders:    []string{"Content-Length", "Content-Type"},
@@ -137,6 +159,7 @@ func (r *Router) Setup() *gin.Engine {
 			reviews.POST("", r.reviewHandler.CreateReview)
 			reviews.GET("", r.reviewHandler.ListReviews)
 			reviews.GET("/:id", r.reviewHandler.GetReview)
+			reviews.GET("/:id/pdf", r.reviewHandler.GetReviewPDF)
 			reviews.DELETE("/:id", r.reviewHandler.DeleteReview)
 			reviews.POST("/:id/reanalyze", r.reviewHandler.ReanalyzeReview)
 		}

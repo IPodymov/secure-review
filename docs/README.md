@@ -1,11 +1,12 @@
 # Secure Review API
 
-Backend сервис для анализа кода на безопасность и code review с использованием OpenAI.
+Backend сервис для анализа кода на безопасность и code review с использованием GitHub Copilot.
 
 ## Содержание
 
 - [Архитектура](#архитектура)
 - [Установка](#установка)
+- [Тестирование](#тестирование)
 - [Конфигурация](#конфигурация)
 - [API Документация](#api-документация)
 - [SOLID Принципы](#solid-принципы)
@@ -43,7 +44,6 @@ secure-review/
 │   │   └── user_handler.go      # Обработчики пользователя
 │   ├── middleware/
 │   │   ├── auth.go              # JWT аутентификация
-│   │   ├── cors.go              # CORS middleware
 │   │   └── logging.go           # Логирование
 │   ├── repository/
 │   │   ├── user_repository.go   # GORM репозиторий пользователей
@@ -52,14 +52,25 @@ secure-review/
 │   │   └── review_adapter.go    # Адаптер для domain.ReviewRepository
 │   ├── router/
 │   │   └── router.go            # Настройка маршрутов
-│   └── service/
-│       ├── auth_service.go      # Сервис аутентификации
-│       ├── github_auth_service.go # GitHub OAuth сервис
-│       ├── jwt.go               # JWT токены
-│       ├── openai_analyzer.go   # OpenAI интеграция
-│       ├── password.go          # Хэширование паролей
-│       ├── review_service.go    # Сервис code review
-│       └── user_service.go      # Сервис пользователей
+│   └── service/                 # Бизнес-логика
+│       ├── auth/                # Аутентификация
+│       │   ├── auth_service.go  # Сервис аутентификации
+│       │   ├── jwt.go           # JWT токены
+│       │   └── password.go      # Хэширование паролей
+│       ├── user/                # Пользователи
+│       │   └── user_service.go  # Сервис пользователей
+│       ├── review/              # Code Review
+│       │   └── review_service.go # Сервис code review
+│       ├── github/              # GitHub интеграция
+│       │   ├── github_auth_service.go  # GitHub OAuth сервис
+│       │   └── github_app_service.go   # GitHub App сервис
+│       ├── analyzer/            # AI анализ
+│       │   └── copilot_analyzer.go # GitHub Copilot интеграция
+│       └── pdf/                 # PDF отчёты
+│           └── pdf_service.go   # Генерация PDF
+├── tests/                       # Тесты
+│   ├── app_test.go              # Интеграционные тесты
+│   └── fakes/                   # Фейковые реализации
 └── docs/                        # Документация
 ```
 
@@ -67,10 +78,10 @@ secure-review/
 
 ### Требования
 
-- Go 1.21+
+- Go 1.24+
 - PostgreSQL 14+
-- OpenAI API Key
-- GitHub OAuth App
+- GitHub Copilot API Key
+- GitHub OAuth App (optional)
 
 ### Шаги установки
 
@@ -101,6 +112,54 @@ go mod download
 go run cmd/api/main.go
 ```
 
+6. Запустите тесты:
+
+```bash
+go test -v ./...
+```
+
+## Тестирование
+
+Проект использует unit и интеграционные тесты с фейковыми реализациями зависимостей.
+
+### Запуск тестов
+
+```bash
+# Все тесты
+go test -v ./...
+
+# Unit тесты сервисов
+go test -v ./internal/service/...
+
+# Интеграционные тесты
+go test -v ./tests/...
+
+# С покрытием
+go test -cover ./...
+```
+
+### Структура тестов
+
+| Компонент | Файл тестов | Покрытие |
+|-----------|-------------|----------|
+| Auth Service | `internal/service/auth/auth_service_test.go` | Регистрация, логин, токены, смена пароля |
+| JWT Token | `internal/service/auth/jwt_test.go` | Генерация, валидация, истекшие токены |
+| Password Hasher | `internal/service/auth/password_test.go` | Хэширование, сравнение |
+| User Service | `internal/service/user/user_service_test.go` | CRUD операции |
+| Review Service | `internal/service/review/review_service_test.go` | Создание, анализ, GitHub интеграция |
+| Health Handler | `internal/handler/health_handler_test.go` | Health, Ready endpoints |
+| Auth Middleware | `internal/middleware/auth_test.go` | JWT валидация |
+| Интеграционные | `tests/app_test.go` | End-to-end сценарии |
+
+### Фейковые реализации
+
+Фейки находятся в `tests/fakes/` и реализуют доменные интерфейсы:
+
+- `FakeUserRepository` — in-memory хранилище пользователей
+- `FakeReviewRepository` — in-memory хранилище reviews
+- `FakeCodeAnalyzer` — mock AI анализатора
+- `FakeGitHubService` — mock GitHub API
+
 ## Конфигурация
 
 Все переменные окружения описаны в файле `.env.example`:
@@ -113,8 +172,8 @@ go run cmd/api/main.go
 | `DATABASE_URL`         | PostgreSQL connection string | -                       |
 | `JWT_SECRET`           | Секретный ключ для JWT       | -                       |
 | `JWT_EXPIRATION_HOURS` | Время жизни токена (часы)    | `24`                    |
-| `OPENAI_API_KEY`       | API ключ OpenAI              | -                       |
-| `OPENAI_MODEL`         | Модель OpenAI                | `gpt-4`                 |
+| `COPILOT_API_KEY`      | API ключ GitHub Copilot     | -                       |
+| `COPILOT_MODEL`        | Модель Copilot              | `gpt-4o`                |
 | `GITHUB_CLIENT_ID`     | GitHub OAuth Client ID       | -                       |
 | `GITHUB_CLIENT_SECRET` | GitHub OAuth Client Secret   | -                       |
 | `GITHUB_REDIRECT_URL`  | URL для callback             | -                       |

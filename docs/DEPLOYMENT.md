@@ -6,7 +6,7 @@
 
 ```dockerfile
 # Build stage
-FROM golang:1.21-alpine AS builder
+FROM golang:1.24-alpine AS builder
 
 WORKDIR /app
 
@@ -43,7 +43,7 @@ services:
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - JWT_SECRET=${JWT_SECRET}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - COPILOT_API_KEY=${COPILOT_API_KEY}
       - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}
       - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}
       - GITHUB_REDIRECT_URL=${GITHUB_REDIRECT_URL}
@@ -102,9 +102,9 @@ DATABASE_URL=postgresql://user:pass@host:5432/dbname?sslmode=require
 JWT_SECRET=very-long-random-string-at-least-32-characters
 JWT_EXPIRATION_HOURS=24
 
-# OpenAI
-OPENAI_API_KEY=sk-...
-OPENAI_MODEL=gpt-4
+# GitHub Copilot
+COPILOT_API_KEY=ghc_...
+COPILOT_MODEL=gpt-4o
 
 # GitHub OAuth (обновите URL на продакшен фронтенд)
 GITHUB_CLIENT_ID=...

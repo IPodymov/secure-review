@@ -17,7 +17,11 @@ import (
 	"github.com/secure-review/internal/middleware"
 	"github.com/secure-review/internal/repository"
 	"github.com/secure-review/internal/router"
-	"github.com/secure-review/internal/service"
+	"github.com/secure-review/internal/service/analyzer"
+	"github.com/secure-review/internal/service/auth"
+	svcgithub "github.com/secure-review/internal/service/github"
+	"github.com/secure-review/internal/service/review"
+	"github.com/secure-review/internal/service/user"
 )
 
 const version = "1.0.0"
@@ -88,24 +92,28 @@ func main() {
 	installationRepo := repository.NewGitHubInstallationRepositoryAdapter(db.DB)
 
 	// Initialize services
-	passwordHasher := service.NewBcryptPasswordHasher()
-	tokenGenerator := service.NewJWTTokenGenerator(
+	passwordHasher := auth.NewBcryptPasswordHasher()
+	tokenGenerator := auth.NewJWTTokenGenerator(
 		cfg.JWT.Secret,
 		time.Duration(cfg.JWT.ExpirationHours)*time.Hour,
 		time.Duration(cfg.JWT.ExpirationHours*7)*time.Hour,
 	)
-	codeAnalyzer := service.NewOpenAICodeAnalyzer(cfg.OpenAI.APIKey)
+	codeAnalyzer := analyzer.NewCopilotCodeAnalyzer(
+		cfg.Copilot.APIKey,
+		cfg.Copilot.Model,
+		cfg.Copilot.APIURL,
+	)
 
-	authService := service.NewAuthService(userRepo, passwordHasher, tokenGenerator)
-	userService := service.NewUserService(userRepo)
-	githubAppService := service.NewGitHubAppService(
+	authService := auth.NewAuthService(userRepo, passwordHasher, tokenGenerator)
+	userService := user.NewUserService(userRepo)
+	githubAppService := svcgithub.NewGitHubAppService(
 		cfg.GitHub.AppID,
 		cfg.GitHub.AppPrivateKey,
 		cfg.GitHub.WebhookSecret,
 		installationRepo,
 		userRepo,
 	)
-	githubAuthService := service.NewGitHubAuthService(
+	githubAuthService := svcgithub.NewGitHubAuthService(
 		cfg.GitHub.ClientID,
 		cfg.GitHub.ClientSecret,
 		cfg.GitHub.RedirectURL,
@@ -113,7 +121,7 @@ func main() {
 		tokenGenerator,
 		githubAppService,
 	)
-	reviewService := service.NewReviewService(reviewRepo, codeAnalyzer, githubAuthService)
+	reviewService := review.NewReviewService(reviewRepo, codeAnalyzer, githubAuthService)
 
 	// Initialize handlers
 	authHandler := handler.NewAuthHandler(authService)

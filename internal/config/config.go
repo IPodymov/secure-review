@@ -13,7 +13,7 @@ type Config struct {
 	Server    ServerConfig
 	Database  DatabaseConfig
 	JWT       JWTConfig
-	OpenAI    OpenAIConfig
+	Copilot   CopilotConfig
 	GitHub    GitHubConfig
 	Frontend  FrontendConfig
 	RateLimit RateLimitConfig
@@ -44,10 +44,11 @@ type JWTConfig struct {
 	ExpirationHours int
 }
 
-// OpenAIConfig holds OpenAI-related configuration
-type OpenAIConfig struct {
+// CopilotConfig holds GitHub Copilot API configuration
+type CopilotConfig struct {
 	APIKey string
 	Model  string
+	APIURL string
 }
 
 // GitHubConfig holds GitHub OAuth configuration
@@ -104,9 +105,10 @@ func Load() (*Config, error) {
 			Secret:          getEnv("JWT_SECRET", "default-secret-key"),
 			ExpirationHours: expirationHours,
 		},
-		OpenAI: OpenAIConfig{
-			APIKey: getEnv("OPENAI_API_KEY", ""),
-			Model:  getEnv("OPENAI_MODEL", "gpt-4"),
+		Copilot: CopilotConfig{
+			APIKey: getEnv("COPILOT_API_KEY", ""),
+			Model:  getEnv("COPILOT_MODEL", "gpt-4o"),
+			APIURL: getEnv("COPILOT_API_URL", "https://models.inference.ai.azure.com/chat/completions"),
 		},
 		GitHub: GitHubConfig{
 			ClientID:      getEnv("GITHUB_CLIENT_ID", ""),
