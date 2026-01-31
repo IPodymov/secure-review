@@ -17,6 +17,8 @@ var _ domain.CodeAnalyzer = (*CopilotCodeAnalyzer)(nil)
 const (
 	// Default model for Copilot
 	defaultCopilotModel = "gpt-4o"
+	// Max characters per chunk (approx 10000 chars to enable system prompt and response within 8k tokens)
+	maxChunkSize = 12000
 )
 
 // CopilotCodeAnalyzer implements CodeAnalyzer using GitHub Copilot API
@@ -72,6 +74,19 @@ type ChatCompletionResponse struct {
 
 // AnalyzeCode performs code review using GitHub Copilot
 func (a *CopilotCodeAnalyzer) AnalyzeCode(ctx context.Context, request *domain.AnalysisRequest) (*domain.AnalysisResult, error) {
+	// If code is too large, split it and analyze only the first chunk for the summary/structure
+	// Or simply process chunks and merge (complex for overall score/summary)
+	// For "AnalyzeCode", the user expects a holistic review.
+	// Simple strategy: If code > limit, truncate or analyze critical parts.
+	// For now, let's just truncate for AnalyzeCode to avoid failure, and let AnalyzeSecurity (the main feature) handle full scan.
+
+	codeToAnalyze := request.Code
+	truncated := false
+	if len(codeToAnalyze) > maxChunkSize {
+		codeToAnalyze = codeToAnalyze[:maxChunkSize] + "\n... (code truncated for detailed analysis) ..."
+		truncated = true
+	}
+
 	basePrompt := fmt.Sprintf(`You are an expert code reviewer. Analyze the following %s code and provide:
 1. A brief summary of what the code does
 2. Any security vulnerabilities found (with severity: critical, high, medium, low, info)
@@ -80,6 +95,10 @@ func (a *CopilotCodeAnalyzer) AnalyzeCode(ctx context.Context, request *domain.A
 
 	if request.CustomPrompt != nil && *request.CustomPrompt != "" {
 		basePrompt += fmt.Sprintf("\n\nUser specific instructions: %s", *request.CustomPrompt)
+	}
+
+	if truncated {
+		basePrompt += "\n\nNote: The code was truncated due to size limits. Analyze the provided part."
 	}
 
 	prompt := fmt.Sprintf(`%s
@@ -103,9 +122,9 @@ Respond in JSON format with this structure:
   ],
   "suggestions": ["string"],
   "overall_score": number
-}`, basePrompt, request.Code)
+}`, basePrompt, codeToAnalyze)
 
-	content, err := a.sendRequest(ctx, prompt, "You are an expert code reviewer specializing in security analysis and code quality. Always respond with valid JSON.", 0.3)
+	content, err := a.sendRequest(ctx, prompt, "You are an expert code reviewer specializing in code quality. Always respond with valid JSON.", 0.3)
 	if err != nil {
 		return nil, err
 	}
@@ -122,6 +141,38 @@ Respond in JSON format with this structure:
 
 // AnalyzeSecurity performs security-focused analysis
 func (a *CopilotCodeAnalyzer) AnalyzeSecurity(ctx context.Context, request *domain.AnalysisRequest) ([]domain.SecurityIssueInput, error) {
+	if len(request.Code) <= maxChunkSize {
+		return a.analyzeSecurityChunk(ctx, request.Code, request.Language, 0)
+	}
+
+	// Split code into chunks
+	chunks := splitCodeIntoChunks(request.Code, maxChunkSize)
+	var allIssues []domain.SecurityIssueInput
+
+	for i, chunk := range chunks {
+		// Calculate rough line offset based on previous chunks (approximation)
+		// To do this accurately we would need to count newlines in previous chunks.
+		// For simplicity, we just pass the chunk. Improving line numbers would require better tracking.
+		// Let's count lines in previous chunks.
+		lineOffset := 0
+		for j := 0; j < i; j++ {
+			lineOffset += strings.Count(chunks[j], "\n")
+		}
+
+		issues, err := a.analyzeSecurityChunk(ctx, chunk, request.Language, lineOffset)
+		if err != nil {
+			// Log error but continue with valid chunks or fail partial?
+			// Let's log and continue to get as much as possible
+			fmt.Printf("Error analyzing chunk %d: %v\n", i, err)
+			continue
+		}
+		allIssues = append(allIssues, issues...)
+	}
+
+	return allIssues, nil
+}
+
+func (a *CopilotCodeAnalyzer) analyzeSecurityChunk(ctx context.Context, code, language string, lineOffset int) ([]domain.SecurityIssueInput, error) {
 	prompt := fmt.Sprintf(`You are a security expert. Analyze the following %s code for security vulnerabilities.
 
 Focus on:
@@ -152,7 +203,7 @@ Respond in JSON format with an array of security issues:
   }
 ]
 
-If no security issues are found, return an empty array: []`, request.Language, request.Code)
+If no security issues are found, return an empty array: []`, language, code)
 
 	content, err := a.sendRequest(ctx, prompt, "You are a security expert specializing in code vulnerability analysis. Always respond with valid JSON.", 0.2)
 	if err != nil {
@@ -166,7 +217,51 @@ If no security issues are found, return an empty array: []`, request.Language, r
 		return nil, fmt.Errorf("failed to parse Copilot response: %w", err)
 	}
 
+	// Adjust line numbers if offset is provided
+	if lineOffset > 0 {
+		for i := range issues {
+			if issues[i].LineStart != nil {
+				start := *issues[i].LineStart + lineOffset
+				issues[i].LineStart = &start
+			}
+			if issues[i].LineEnd != nil {
+				end := *issues[i].LineEnd + lineOffset
+				issues[i].LineEnd = &end
+			}
+		}
+	}
+
 	return issues, nil
+}
+
+// splitCodeIntoChunks splits the code into chunks respecting max size and line boundaries
+func splitCodeIntoChunks(code string, maxSize int) []string {
+	if len(code) <= maxSize {
+		return []string{code}
+	}
+
+	var chunks []string
+	lines := strings.Split(code, "\n")
+	currentChunk := ""
+
+	for _, line := range lines {
+		// +1 for newline character
+		if len(currentChunk)+len(line)+1 > maxSize {
+			chunks = append(chunks, currentChunk)
+			currentChunk = line
+		} else {
+			if currentChunk != "" {
+				currentChunk += "\n"
+			}
+			currentChunk += line
+		}
+	}
+
+	if currentChunk != "" {
+		chunks = append(chunks, currentChunk)
+	}
+
+	return chunks
 }
 
 // sendRequest sends a request to the Copilot API
