@@ -1,6 +1,6 @@
 # Secure Review API
 
-Backend сервис для анализа кода на безопасность и code review с использованием OpenAI.
+Backend сервис для анализа кода на безопасность и code review с использованием GitHub Copilot.
 
 ## Содержание
 
@@ -65,7 +65,7 @@ secure-review/
 │       │   ├── github_auth_service.go  # GitHub OAuth сервис
 │       │   └── github_app_service.go   # GitHub App сервис
 │       ├── analyzer/            # AI анализ
-│       │   └── openai_analyzer.go # OpenAI интеграция
+│       │   └── copilot_analyzer.go # GitHub Copilot интеграция
 │       └── pdf/                 # PDF отчёты
 │           └── pdf_service.go   # Генерация PDF
 ├── tests/                       # Тесты
@@ -80,7 +80,7 @@ secure-review/
 
 - Go 1.24+
 - PostgreSQL 14+
-- OpenAI API Key
+- GitHub Copilot API Key
 - GitHub OAuth App (optional)
 
 ### Шаги установки
@@ -172,8 +172,8 @@ go test -cover ./...
 | `DATABASE_URL`         | PostgreSQL connection string | -                       |
 | `JWT_SECRET`           | Секретный ключ для JWT       | -                       |
 | `JWT_EXPIRATION_HOURS` | Время жизни токена (часы)    | `24`                    |
-| `OPENAI_API_KEY`       | API ключ OpenAI              | -                       |
-| `OPENAI_MODEL`         | Модель OpenAI                | `gpt-4`                 |
+| `COPILOT_API_KEY`      | API ключ GitHub Copilot     | -                       |
+| `COPILOT_MODEL`        | Модель Copilot              | `gpt-4o`                |
 | `GITHUB_CLIENT_ID`     | GitHub OAuth Client ID       | -                       |
 | `GITHUB_CLIENT_SECRET` | GitHub OAuth Client Secret   | -                       |
 | `GITHUB_REDIRECT_URL`  | URL для callback             | -                       |
