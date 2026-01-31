@@ -1,4 +1,4 @@
-package service
+package github
 
 import (
 	"archive/zip"
@@ -26,7 +26,7 @@ var _ domain.GitHubAuthService = (*GitHubAuthServiceImpl)(nil)
 type GitHubAuthServiceImpl struct {
 	oauth2Config   *oauth2.Config
 	userRepo       domain.UserRepository
-	tokenGenerator *JWTTokenGenerator
+	tokenGenerator domain.TokenGenerator
 	appService     domain.GitHubAppService
 }
 
@@ -34,7 +34,7 @@ type GitHubAuthServiceImpl struct {
 func NewGitHubAuthService(
 	clientID, clientSecret, redirectURL string,
 	userRepo domain.UserRepository,
-	tokenGenerator *JWTTokenGenerator,
+	tokenGenerator domain.TokenGenerator,
 	appService domain.GitHubAppService,
 ) *GitHubAuthServiceImpl {
 	return &GitHubAuthServiceImpl{

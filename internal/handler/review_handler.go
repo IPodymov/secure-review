@@ -11,20 +11,20 @@ import (
 	"github.com/secure-review/internal/domain"
 	"github.com/secure-review/internal/logger"
 	"github.com/secure-review/internal/middleware"
-	"github.com/secure-review/internal/service"
+	"github.com/secure-review/internal/service/pdf"
 )
 
 // ReviewHandler handles code review endpoints
 type ReviewHandler struct {
 	reviewService domain.ReviewService
-	pdfService    *service.PDFService
+	pdfService    *pdf.PDFService
 }
 
 // NewReviewHandler creates a new ReviewHandler
 func NewReviewHandler(reviewService domain.ReviewService) *ReviewHandler {
 	return &ReviewHandler{
 		reviewService: reviewService,
-		pdfService:    service.NewPDFService(),
+		pdfService:    pdf.NewPDFService(),
 	}
 }
 

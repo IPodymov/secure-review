@@ -49,10 +49,12 @@ type SecurityIssue struct {
 	Severity    SecuritySeverity `json:"severity"`
 	Title       string           `json:"title"`
 	Description string           `json:"description"`
+	FilePath    *string          `json:"file_path,omitempty"`
 	LineStart   *int             `json:"line_start,omitempty"`
 	LineEnd     *int             `json:"line_end,omitempty"`
 	Suggestion  string           `json:"suggestion"`
 	CWE         *string          `json:"cwe,omitempty"`
+	CodeSnippet *string          `json:"code_snippet,omitempty"`
 	CreatedAt   time.Time        `json:"created_at"`
 }
 
@@ -72,28 +74,32 @@ type ReviewResponse struct {
 	ID             uuid.UUID       `json:"id"`
 	UserID         uuid.UUID       `json:"user_id"`
 	Title          string          `json:"title"`
-	Code           string          `json:"code"`
 	Language       string          `json:"language"`
 	Status         ReviewStatus    `json:"status"`
 	Result         *string         `json:"result,omitempty"`
 	CustomPrompt   *string         `json:"custom_prompt,omitempty"`
 	SecurityIssues []SecurityIssue `json:"security_issues,omitempty"`
+	OverallScore   int             `json:"overall_score"`
+	Summary        string          `json:"summary,omitempty"`
+	Suggestions    []string        `json:"suggestions,omitempty"`
 	CreatedAt      time.Time       `json:"created_at"`
 	CompletedAt    *time.Time      `json:"completed_at,omitempty"`
 }
 
 // ToResponse converts CodeReview to ReviewResponse
-func (r *CodeReview) ToResponse(issues []SecurityIssue) *ReviewResponse {
+func (r *CodeReview) ToResponse(issues []SecurityIssue, score int, summary string, suggestions []string) *ReviewResponse {
 	return &ReviewResponse{
 		ID:             r.ID,
 		UserID:         r.UserID,
 		Title:          r.Title,
-		Code:           r.Code,
 		Language:       r.Language,
 		Status:         r.Status,
 		Result:         r.Result,
 		CustomPrompt:   r.CustomPrompt,
 		SecurityIssues: issues,
+		OverallScore:   score,
+		Summary:        summary,
+		Suggestions:    suggestions,
 		CreatedAt:      r.CreatedAt,
 		CompletedAt:    r.CompletedAt,
 	}
@@ -128,8 +134,10 @@ type SecurityIssueInput struct {
 	Severity    SecuritySeverity `json:"severity"`
 	Title       string           `json:"title"`
 	Description string           `json:"description"`
+	FilePath    *string          `json:"file_path,omitempty"`
 	LineStart   *int             `json:"line_start,omitempty"`
 	LineEnd     *int             `json:"line_end,omitempty"`
 	Suggestion  string           `json:"suggestion"`
 	CWE         *string          `json:"cwe,omitempty"`
+	CodeSnippet *string          `json:"code_snippet,omitempty"`
 }

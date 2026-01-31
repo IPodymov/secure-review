@@ -83,10 +83,12 @@ type SecurityIssue struct {
 	Severity    SecuritySeverity `gorm:"size:20;not null" json:"severity"`
 	Title       string           `gorm:"size:255;not null" json:"title"`
 	Description string           `gorm:"type:text;not null" json:"description"`
+	FilePath    *string          `gorm:"size:500" json:"file_path,omitempty"`
 	LineStart   *int             `json:"line_start,omitempty"`
 	LineEnd     *int             `json:"line_end,omitempty"`
 	Suggestion  string           `gorm:"type:text" json:"suggestion"`
 	CWE         *string          `gorm:"size:20" json:"cwe,omitempty"`
+	CodeSnippet *string          `gorm:"type:text" json:"code_snippet,omitempty"`
 
 	// Timestamps
 	CreatedAt time.Time      `gorm:"autoCreateTime" json:"created_at"`

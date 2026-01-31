@@ -10,7 +10,9 @@ import (
 
 	"github.com/secure-review/internal/domain"
 	"github.com/secure-review/internal/handler"
-	"github.com/secure-review/internal/service"
+	"github.com/secure-review/internal/service/auth"
+	"github.com/secure-review/internal/service/review"
+	"github.com/secure-review/internal/service/user"
 	"github.com/secure-review/tests/fakes"
 
 	"github.com/gin-gonic/gin"
@@ -29,10 +31,10 @@ func SetupApp() *gin.Engine {
 	tokenGen := fakes.NewFakeTokenGenerator()
 
 	// Initialize Services
-	authService := service.NewAuthService(userRepo, hasher, tokenGen)
+	authService := auth.NewAuthService(userRepo, hasher, tokenGen)
 	githubService := fakes.NewFakeGitHubAuthService()
-	reviewService := service.NewReviewService(reviewRepo, analyzer, githubService)
-	userService := service.NewUserService(userRepo)
+	reviewService := review.NewReviewService(reviewRepo, analyzer, githubService)
+	userService := user.NewUserService(userRepo)
 
 	// Mocks for unused services in this test suite
 	// githubService := service.NewGitHubAuthService(...)
@@ -170,7 +172,7 @@ func TestAuthFlowAndReview(t *testing.T) {
 	err = json.Unmarshal(w.Body.Bytes(), &reviewResp)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, reviewResp.ID)
-	assert.Equal(t, *reviewPayload.Code, reviewResp.Code)
+	assert.Equal(t, reviewPayload.Title, reviewResp.Title)
 
 	// Since analysis is async, we need to wait and fetch again
 	time.Sleep(100 * time.Millisecond)

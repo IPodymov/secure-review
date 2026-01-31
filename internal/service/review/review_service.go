@@ -1,9 +1,9 @@
-package service
+package review
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -84,7 +84,7 @@ func (s *ReviewServiceImpl) Create(ctx context.Context, userID uuid.UUID, input 
 	// Start async analysis with repo details check
 	go s.analyzeCode(context.Background(), review, repoOwner, repoName, repoBranch)
 
-	return review.ToResponse(nil), nil
+	return review.ToResponse(nil, 0, "", nil), nil
 }
 
 // GetByID returns a review by ID
@@ -103,7 +103,10 @@ func (s *ReviewServiceImpl) GetByID(ctx context.Context, userID uuid.UUID, revie
 		issues = nil
 	}
 
-	return review.ToResponse(issues), nil
+	// Parse result to get score, summary and suggestions
+	score, summary, suggestions := s.parseResultMetadata(review.Result)
+
+	return review.ToResponse(issues, score, summary, suggestions), nil
 }
 
 // GetUserReviews returns paginated reviews for a user
@@ -123,7 +126,8 @@ func (s *ReviewServiceImpl) GetUserReviews(ctx context.Context, userID uuid.UUID
 	responses := make([]domain.ReviewResponse, len(reviews))
 	for i, review := range reviews {
 		issues, _ := s.reviewRepo.GetSecurityIssuesByReviewID(ctx, review.ID)
-		responses[i] = *review.ToResponse(issues)
+		score, summary, suggestions := s.parseResultMetadata(review.Result)
+		responses[i] = *review.ToResponse(issues, score, summary, suggestions)
 	}
 
 	totalPages := (total + pageSize - 1) / pageSize
@@ -185,7 +189,7 @@ func (s *ReviewServiceImpl) ReanalyzeReview(ctx context.Context, userID uuid.UUI
 	// Start async analysis
 	go s.analyzeCode(context.Background(), review, nil, nil, nil)
 
-	return review.ToResponse(nil), nil
+	return review.ToResponse(nil, 0, "", nil), nil
 }
 
 func (s *ReviewServiceImpl) analyzeCode(ctx context.Context, review *domain.CodeReview, repoOwner, repoName, repoBranch *string) {
@@ -249,27 +253,43 @@ func (s *ReviewServiceImpl) analyzeCode(ctx context.Context, review *domain.Code
 
 	review.Status = domain.ReviewStatusCompleted
 
-	// Format the result to include score, summary and suggestions
-	var resultBuilder strings.Builder
-	resultBuilder.WriteString("# Analysis Result\n\n")
-	resultBuilder.WriteString(fmt.Sprintf("**Overall Safe Score:** %d/100\n\n", result.OverallScore))
-
-	resultBuilder.WriteString("## Summary\n")
-	resultBuilder.WriteString(result.Summary)
-	resultBuilder.WriteString("\n\n")
-
-	if len(result.Suggestions) > 0 {
-		resultBuilder.WriteString("## Code Quality Suggestions\n")
-		for _, suggestion := range result.Suggestions {
-			resultBuilder.WriteString(fmt.Sprintf("- %s\n", suggestion))
-		}
+	// Store structured result as JSON for parsing later
+	resultData := struct {
+		OverallScore int      `json:"overall_score"`
+		Summary      string   `json:"summary"`
+		Suggestions  []string `json:"suggestions"`
+	}{
+		OverallScore: result.OverallScore,
+		Summary:      result.Summary,
+		Suggestions:  result.Suggestions,
 	}
 
-	resultString := resultBuilder.String()
+	resultJSON, _ := json.Marshal(resultData)
+	resultString := string(resultJSON)
 	review.Result = &resultString
 
 	now := time.Now()
 	review.CompletedAt = &now
 	review.UpdatedAt = now
 	_ = s.reviewRepo.Update(ctx, review)
+}
+
+// parseResultMetadata extracts score, summary and suggestions from stored result
+func (s *ReviewServiceImpl) parseResultMetadata(result *string) (int, string, []string) {
+	if result == nil || *result == "" {
+		return 0, "", nil
+	}
+
+	var data struct {
+		OverallScore int      `json:"overall_score"`
+		Summary      string   `json:"summary"`
+		Suggestions  []string `json:"suggestions"`
+	}
+
+	if err := json.Unmarshal([]byte(*result), &data); err != nil {
+		// Fallback for old markdown format
+		return 0, "", nil
+	}
+
+	return data.OverallScore, data.Summary, data.Suggestions
 }
