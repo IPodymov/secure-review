@@ -74,6 +74,7 @@ type ReviewResponse struct {
 	ID             uuid.UUID       `json:"id"`
 	UserID         uuid.UUID       `json:"user_id"`
 	Title          string          `json:"title"`
+	Code           string          `json:"code,omitempty"`
 	Language       string          `json:"language"`
 	Status         ReviewStatus    `json:"status"`
 	Result         *string         `json:"result,omitempty"`
@@ -92,6 +93,7 @@ func (r *CodeReview) ToResponse(issues []SecurityIssue, score int, summary strin
 		ID:             r.ID,
 		UserID:         r.UserID,
 		Title:          r.Title,
+		Code:           r.Code,
 		Language:       r.Language,
 		Status:         r.Status,
 		Result:         r.Result,
